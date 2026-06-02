@@ -60,4 +60,45 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, getMyCards, changePassword };
+
+// ════════════════════════════════════════════
+// POST /api/user/apply-card
+// ════════════════════════════════════════════
+const applyCard = async (req, res) => {
+  try {
+    const { card_type } = req.body;
+    const userId = req.user.id;
+
+    const validTypes = ['family', 'business', 'student', 'vehicle', 'agriculture'];
+    if (!card_type || !validTypes.includes(card_type.toLowerCase())) {
+      return res.status(400).json({ success: false, message: 'Invalid card type.' });
+    }
+
+    // Check if user already has a request for this card type
+    const [existing] = await db.query(
+      'SELECT id, status FROM cards WHERE user_id = ? AND card_type = ?',
+      [userId, card_type.toLowerCase()]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `আপনি ইতিমধ্যে ${card_type} কার্ডের জন্য আবেদন করেছেন (Status: ${existing[0].status}).`
+      });
+    }
+
+    // Insert new card application
+    await db.query(
+      'INSERT INTO cards (user_id, card_type, status, applied_at) VALUES (?, ?, ?, NOW())',
+      [userId, card_type.toLowerCase(), 'applied']
+    );
+
+    res.json({ success: true, message: `${card_type} কার্ডের জন্য সফলভাবে আবেদন করা হয়েছে!` });
+  } catch (err) {
+    console.error('Apply card error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getProfile, getMyCards, changePassword, applyCard };
+
