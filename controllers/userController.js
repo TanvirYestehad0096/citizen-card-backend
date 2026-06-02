@@ -61,6 +61,12 @@ const changePassword = async (req, res) => {
 };
 
 
+// ── Helper: generate card number ─────────────
+const generateCardNumber = (type) => {
+  const prefix = { family: 'FAM', business: 'BUS', student: 'STU', vehicle: 'VEH', agriculture: 'AGR' };
+  return `BD-${prefix[type] || 'GEN'}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+};
+
 // ════════════════════════════════════════════
 // POST /api/user/apply-card
 // ════════════════════════════════════════════
@@ -87,10 +93,13 @@ const applyCard = async (req, res) => {
       });
     }
 
+    // Generate card number at insert time (same as registration)
+    const cardNumber = generateCardNumber(card_type.toLowerCase());
+
     // Insert new card application
     await db.query(
-      'INSERT INTO cards (user_id, card_type, status, applied_at) VALUES (?, ?, ?, NOW())',
-      [userId, card_type.toLowerCase(), 'applied']
+      'INSERT INTO cards (user_id, card_type, card_number, status, applied_at) VALUES (?, ?, ?, ?, NOW())',
+      [userId, card_type.toLowerCase(), cardNumber, 'applied']
     );
 
     res.json({ success: true, message: `${card_type} কার্ডের জন্য সফলভাবে আবেদন করা হয়েছে!` });

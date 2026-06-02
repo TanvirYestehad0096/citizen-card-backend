@@ -110,6 +110,12 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+// ── Helper: generate card number ─────────────
+const generateCardNumber = (type) => {
+  const prefix = { family: 'FAM', business: 'BUS', student: 'STU', vehicle: 'VEH', agriculture: 'AGR' };
+  return `BD-${prefix[type] || 'GEN'}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+};
+
 // ════════════════════════════════════════════
 // PATCH /api/admin/cards/:id/status
 // Body: { status: 'processing' | 'approved' | 'rejected' | 'issued' }
@@ -124,10 +130,26 @@ const updateCardStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid card status.' });
     }
 
+    // Fetch current card to check if card_number exists
+    const [[card]] = await db.query(
+      'SELECT id, card_type, card_number FROM cards WHERE id = ?',
+      [id]
+    );
+    if (!card) {
+      return res.status(404).json({ success: false, message: 'Card not found.' });
+    }
+
+    // Auto-generate card number if missing and status is approved or issued
+    let cardNumber = card.card_number;
+    if (!cardNumber && (status === 'approved' || status === 'issued')) {
+      cardNumber = generateCardNumber(card.card_type);
+    }
+
     const issuedAt = status === 'issued' ? new Date() : null;
+
     await db.query(
-      'UPDATE cards SET status = ?, issued_at = ? WHERE id = ?',
-      [status, issuedAt, id]
+      'UPDATE cards SET status = ?, card_number = ?, issued_at = ? WHERE id = ?',
+      [status, cardNumber, issuedAt, id]
     );
 
     res.json({ success: true, message: `Card status updated to '${status}'.` });
