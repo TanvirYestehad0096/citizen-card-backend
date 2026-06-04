@@ -13,18 +13,19 @@ const PORT = process.env.PORT || 5000;
 // ── Auto Migration (adds new columns if not exist) ───
 async function runMigrations() {
   try {
-    const migrations = [
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email       VARCHAR(150) DEFAULT NULL AFTER phone`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS blood_group ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') DEFAULT NULL AFTER email`,
-      `ALTER TABLE users ADD COLUMN IF NOT EXISTS address     TEXT DEFAULT NULL AFTER blood_group`,
-    ];
-    for (const sql of migrations) {
-      await db.query(sql);
-    }
-    console.log('✅ Database migrations applied successfully.');
-  } catch (err) {
-    console.error('⚠️  Migration warning:', err.message);
-  }
+    await db.query(`ALTER TABLE users ADD COLUMN email VARCHAR(150) DEFAULT NULL AFTER phone`);
+    console.log('✅ Added email column');
+  } catch (err) { }
+  
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN blood_group ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') DEFAULT NULL AFTER email`);
+    console.log('✅ Added blood_group column');
+  } catch (err) { }
+
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN address TEXT DEFAULT NULL AFTER blood_group`);
+    console.log('✅ Added address column');
+  } catch (err) { }
 }
 
 // ── Middleware ───────────────────────────────
