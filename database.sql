@@ -14,11 +14,19 @@ CREATE TABLE users (
     full_name     VARCHAR(100) NOT NULL,
     date_of_birth DATE         NOT NULL,
     phone         VARCHAR(15)  NOT NULL UNIQUE,
+    email         VARCHAR(150) DEFAULT NULL,
+    blood_group   ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') DEFAULT NULL,
+    address       TEXT         DEFAULT NULL,
     password_hash VARCHAR(255) NOT NULL,
     status        ENUM('pending', 'active', 'suspended') DEFAULT 'pending',
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Run these if table already exists (for existing deployments):
+-- ALTER TABLE users ADD COLUMN email       VARCHAR(150) DEFAULT NULL AFTER phone;
+-- ALTER TABLE users ADD COLUMN blood_group ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-') DEFAULT NULL AFTER email;
+-- ALTER TABLE users ADD COLUMN address     TEXT         DEFAULT NULL AFTER blood_group;
 
 -- ─────────────────────────────────────────────
 -- 2. CARDS TABLE (card types per user)
