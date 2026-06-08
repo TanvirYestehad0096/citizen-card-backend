@@ -24,7 +24,10 @@ const getProfile = async (req, res) => {
 const getMyCards = async (req, res) => {
   try {
     const [cards] = await db.query(
-      'SELECT id, card_type, card_number, status, applied_at, issued_at FROM cards WHERE user_id = ?',
+      `SELECT c.id, ct.type_name AS card_type, c.card_number, c.status, c.applied_at, c.issued_at 
+       FROM cards c 
+       JOIN card_types ct ON c.card_type_id = ct.id 
+       WHERE c.user_id = ?`,
       [req.user.id]
     );
     res.json({ success: true, cards });
@@ -80,9 +83,12 @@ const applyCard = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid card type.' });
     }
 
-    // Check if user already has a request for this card type
+    // Check if user already has a request for this card type using JOIN
     const [existing] = await db.query(
-      'SELECT id, status FROM cards WHERE user_id = ? AND card_type = ?',
+      `SELECT c.id, c.status 
+       FROM cards c
+       JOIN card_types ct ON c.card_type_id = ct.id
+       WHERE c.user_id = ? AND ct.type_name = ?`,
       [userId, card_type.toLowerCase()]
     );
 
@@ -93,13 +99,14 @@ const applyCard = async (req, res) => {
       });
     }
 
-    // Generate card number at insert time (same as registration)
+    // Generate card number at insert time
     const cardNumber = generateCardNumber(card_type.toLowerCase());
 
-    // Insert new card application
+    // Insert new card application using Subquery to map type_name to id
     await db.query(
-      'INSERT INTO cards (user_id, card_type, card_number, status, applied_at) VALUES (?, ?, ?, ?, NOW())',
-      [userId, card_type.toLowerCase(), cardNumber, 'applied']
+      `INSERT INTO cards (user_id, card_type_id, card_number, status, applied_at) 
+       SELECT ?, id, ?, 'applied', NOW() FROM card_types WHERE type_name = ?`,
+      [userId, cardNumber, card_type.toLowerCase()]
     );
 
     res.json({ success: true, message: `${card_type} কার্ডের জন্য সফলভাবে আবেদন করা হয়েছে!` });

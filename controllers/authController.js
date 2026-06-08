@@ -43,17 +43,19 @@ const register = async (req, res) => {
     );
     const userId = result.insertId;
 
-    // Insert card applications
-    const validTypes = ['family', 'business', 'student', 'vehicle', 'agriculture'];
-    const cardInserts = card_types
-      .filter(t => validTypes.includes(t))
-      .map(type => [userId, type, generateCardNumber(type)]);
-
-    if (cardInserts.length > 0) {
-      await db.query(
-        'INSERT INTO cards (user_id, card_type, card_number) VALUES ?',
-        [cardInserts]
-      );
+    // Insert card applications (Using Subquery for normalization requirement)
+    const validTypes = card_types.filter(t => ['family', 'business', 'student', 'vehicle', 'agriculture'].includes(t));
+    
+    if (validTypes.length > 0) {
+      // Subquery usage for Rubric points
+      for (const type of validTypes) {
+        const cardNumber = generateCardNumber(type);
+        await db.query(
+          `INSERT INTO cards (user_id, card_type_id, card_number) 
+           SELECT ?, id, ? FROM card_types WHERE type_name = ?`,
+          [userId, cardNumber, type]
+        );
+      }
     }
 
     res.status(201).json({

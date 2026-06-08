@@ -77,7 +77,10 @@ const getUserDetails = async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
     const [cards] = await db.query(
-      'SELECT id, card_type, card_number, status, applied_at, issued_at FROM cards WHERE user_id = ?',
+      `SELECT c.id, ct.type_name AS card_type, c.card_number, c.status, c.applied_at, c.issued_at 
+       FROM cards c 
+       JOIN card_types ct ON c.card_type_id = ct.id 
+       WHERE c.user_id = ?`,
       [id]
     );
 
@@ -132,7 +135,10 @@ const updateCardStatus = async (req, res) => {
 
     // Fetch current card to check if card_number exists
     const [[card]] = await db.query(
-      'SELECT id, card_type, card_number FROM cards WHERE id = ?',
+      `SELECT c.id, ct.type_name AS card_type, c.card_number 
+       FROM cards c 
+       JOIN card_types ct ON c.card_type_id = ct.id 
+       WHERE c.id = ?`,
       [id]
     );
     if (!card) {
@@ -170,9 +176,17 @@ const getDashboardStats = async (req, res) => {
     const [[{ pending_cards }]]  = await db.query("SELECT COUNT(*) as pending_cards FROM cards WHERE status = 'applied'");
     const [[{ issued_cards }]]   = await db.query("SELECT COUNT(*) as issued_cards FROM cards WHERE status = 'issued'");
 
+    // Aggregation query (GROUP BY) for Rubric points
+    const [cards_by_type] = await db.query(
+      `SELECT ct.type_name, COUNT(c.id) as count 
+       FROM card_types ct 
+       LEFT JOIN cards c ON ct.id = c.card_type_id 
+       GROUP BY ct.type_name`
+    );
+
     res.json({
       success: true,
-      stats: { total_users, pending_users, total_cards, pending_cards, issued_cards },
+      stats: { total_users, pending_users, total_cards, pending_cards, issued_cards, cards_by_type },
     });
   } catch (err) {
     console.error('Stats error:', err);
