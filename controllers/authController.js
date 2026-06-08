@@ -149,10 +149,14 @@ const sendOTP = async (req, res) => {
       [phone, otp, expires]
     );
 
-    // TODO: Integrate real SMS API (e.g. SSL Wireless, Twilio) here
-    console.log(`📱 OTP for ${phone}: ${otp}`); // Remove in production
+    // NOTE: No SMS API integrated — returning OTP in response for demo/development
+    console.log(`📱 OTP for ${phone}: ${otp}`);
 
-    res.json({ success: true, message: 'OTP sent successfully.' });
+    res.json({
+      success: true,
+      message: 'OTP generated successfully.',
+      otp: otp  // Remove this line when real SMS API is integrated
+    });
   } catch (err) {
     console.error('Send OTP error:', err);
     res.status(500).json({ success: false, message: 'Server error.' });

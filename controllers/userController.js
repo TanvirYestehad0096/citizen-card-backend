@@ -168,5 +168,40 @@ const updateProfile = async (req, res) => {
   }
 };
 
-module.exports = { getProfile, getMyCards, changePassword, applyCard, updateProfile };
+// ════════════════════════════════════════════
+// DELETE /api/user/delete-account
+// ════════════════════════════════════════════
+const deleteAccount = async (req, res) => {
+  try {
+    const { password } = req.body;
+    const userId = req.user.id;
+
+    if (!password) {
+      return res.status(400).json({ success: false, message: 'Password confirmation required.' });
+    }
+
+    // Verify password first
+    const [rows] = await db.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, rows[0].password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Password incorrect. Account not deleted.' });
+    }
+
+    // Delete cards first (foreign key), then user
+    await db.query('DELETE FROM cards WHERE user_id = ?', [userId]);
+    await db.query('DELETE FROM otp_verifications WHERE phone = (SELECT phone FROM users WHERE id = ?)', [userId]);
+    await db.query('DELETE FROM users WHERE id = ?', [userId]);
+
+    res.json({ success: true, message: 'Account successfully deleted.' });
+  } catch (err) {
+    console.error('Delete account error:', err);
+    res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getProfile, getMyCards, changePassword, applyCard, updateProfile, deleteAccount };
 
