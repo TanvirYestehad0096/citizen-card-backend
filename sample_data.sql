@@ -53,3 +53,11 @@ INSERT INTO otp_verifications (phone, otp_code, purpose, is_used, expires_at) VA
 ('01733333333', '345678', 'password_reset', TRUE,  '2024-03-15 11:10:00'),
 ('01755555555', '456789', 'registration',   TRUE,  '2024-02-01 09:10:00'),
 ('01766666666', '567890', 'password_reset', FALSE, '2024-04-20 15:10:00');
+
+-- ==============================================================================
+-- ✅ Sample data summary:
+-- Users:             6 (active, pending, suspended)
+-- Cards:            12 (issued, approved, processing, applied, rejected)
+-- Card Types:        5 (family, business, student, vehicle, agriculture)
+-- OTP Records:       5
+-- ==============================================================================
