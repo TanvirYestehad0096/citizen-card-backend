@@ -23,6 +23,11 @@ const register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'All fields are required.' });
     }
 
+    // Validate NID length
+    if (nid_number.length !== 10) {
+      return res.status(400).json({ success: false, message: 'NID number must be exactly 10 digits.' });
+    }
+
     // Check duplicate NID or phone
     const [existing] = await db.query(
       'SELECT id FROM users WHERE nid_number = ? OR phone = ?',
