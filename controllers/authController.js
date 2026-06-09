@@ -65,7 +65,7 @@ const register = async (req, res) => {
     });
   } catch (err) {
     console.error('Register error:', err);
-    res.status(500).json({ success: false, message: 'Server error.' });
+    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
 };
 
