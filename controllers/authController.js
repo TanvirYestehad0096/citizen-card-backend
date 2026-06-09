@@ -15,60 +15,80 @@ const generateCardNumber = (type) => {
 // POST /api/auth/register
 // ════════════════════════════════════════════
 const register = async (req, res) => {
+  const conn = await db.getConnection();
   try {
-    const { nid_number, full_name, date_of_birth, phone, password, card_types } = req.body;
+    const { nid_number, full_name, date_of_birth, phone, password, blood_group, card_types } = req.body;
 
     // Validate required fields
     if (!nid_number || !full_name || !date_of_birth || !phone || !password || !card_types?.length) {
+      conn.release();
       return res.status(400).json({ success: false, message: 'All fields are required.' });
     }
 
-    // Validate NID length
+    // Validate NID length — must be exactly 10 digits
     if (nid_number.length !== 10) {
+      conn.release();
       return res.status(400).json({ success: false, message: 'NID number must be exactly 10 digits.' });
     }
 
-    // Check duplicate NID or phone
-    const [existing] = await db.query(
+    // Check duplicate NID or phone BEFORE transaction
+    const [existing] = await conn.query(
       'SELECT id FROM users WHERE nid_number = ? OR phone = ?',
       [nid_number, phone]
     );
     if (existing.length > 0) {
+      conn.release();
       return res.status(409).json({ success: false, message: 'NID or phone number already registered.' });
     }
+
+    // ── BEGIN TRANSACTION ─────────────────────
+    await conn.beginTransaction();
 
     // Hash password
     const password_hash = await bcrypt.hash(password, 10);
 
-    // Insert user
-    const [result] = await db.query(
-      `INSERT INTO users (nid_number, full_name, date_of_birth, phone, password_hash)
-       VALUES (?, ?, ?, ?, ?)`,
-      [nid_number, full_name, date_of_birth, phone, password_hash]
+    // Insert user (inside transaction)
+    const [result] = await conn.query(
+      `INSERT INTO users (nid_number, full_name, date_of_birth, phone, password_hash, blood_group)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [nid_number, full_name, date_of_birth, phone, password_hash, blood_group || null]
     );
     const userId = result.insertId;
 
-    // Insert card applications (Using Subquery for normalization requirement)
-    const validTypes = card_types.filter(t => ['family', 'business', 'student', 'vehicle', 'agriculture'].includes(t));
-    
-    if (validTypes.length > 0) {
-      // Subquery usage for Rubric points
-      for (const type of validTypes) {
-        const cardNumber = generateCardNumber(type);
-        await db.query(
-          `INSERT INTO cards (user_id, card_type_id, card_number) 
-           SELECT ?, id, ? FROM card_types WHERE type_name = ?`,
-          [userId, cardNumber, type]
-        );
-      }
+    // Insert card applications — Subquery usage for rubric points (inside transaction)
+    const validTypes = card_types.filter(t =>
+      ['family', 'business', 'student', 'vehicle', 'agriculture'].includes(t)
+    );
+
+    if (validTypes.length === 0) {
+      await conn.rollback();
+      conn.release();
+      return res.status(400).json({ success: false, message: 'Please select at least one valid card type.' });
     }
+
+    for (const type of validTypes) {
+      const cardNumber = generateCardNumber(type);
+      await conn.query(
+        `INSERT INTO cards (user_id, card_type_id, card_number)
+         SELECT ?, id, ? FROM card_types WHERE type_name = ?`,
+        [userId, cardNumber, type]
+      );
+    }
+
+    // ── COMMIT ───────────────────────────────
+    await conn.commit();
+    conn.release();
 
     res.status(201).json({
       success: true,
       message: 'Registration successful! Your application is under review.',
       user_id: userId,
     });
+
   } catch (err) {
+    // ── ROLLBACK on any error ─────────────────
+    try { await conn.rollback(); } catch (_) {}
+    conn.release();
     console.error('Register error:', err);
     res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
