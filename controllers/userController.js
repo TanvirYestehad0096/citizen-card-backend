@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 
 // ════════════════════════════════════════════
@@ -40,8 +41,6 @@ const getMyCards = async (req, res) => {
 // ════════════════════════════════════════════
 // PUT /api/user/change-password
 // ════════════════════════════════════════════
-const bcrypt = require('bcryptjs');
-
 const changePassword = async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
