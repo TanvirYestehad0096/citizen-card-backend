@@ -194,4 +194,11 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { adminLogin, getAllUsers, getUserDetails, updateUserStatus, updateCardStatus, getDashboardStats };
+// TEMPORARY: hash generator — remove after use
+const generateHash = async (req, res) => {
+  const { password } = req.body;
+  const hash = await bcrypt.hash(password, 10);
+  res.json({ hash });
+};
+
+module.exports = { adminLogin, getAllUsers, getUserDetails, updateUserStatus, updateCardStatus, getDashboardStats, generateHash };
