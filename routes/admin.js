@@ -162,4 +162,11 @@ router.put('/change-password', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+// TEMPORARY: hash generator
+router.post('/generate-hash', async (req, res) => {
+  const { password } = req.body;
+  const hash = await bcrypt.hash(password, 10);
+  res.json({ hash });
+});
+
 module.exports = router;
