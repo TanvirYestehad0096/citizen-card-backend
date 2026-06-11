@@ -1,38 +1,39 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const db = require('../config/db');
+const jwt     = require('jsonwebtoken');
+const bcrypt  = require('bcryptjs');
+const db      = require('../config/db');
 
 const router = express.Router();
 
+/* ── Admin Auth Middleware ───────────────────────── */
 const adminAuthMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'Admin token required' });
-  }
+  if (!token) return res.status(401).json({ success: false, message: 'Admin token required' });
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    req.admin = decoded;
+    req.admin = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
     next();
-  } catch (err) {
+  } catch {
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 };
 
+/* ── POST /login ─────────────────────────────────── */
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password) {
+    if (!username || !password)
       return res.status(400).json({ success: false, message: 'Username এবং password দিন।' });
-    }
-    const [admins] = await db.query('SELECT id, password_hash FROM admins WHERE username = ?', [username]);
-    if (admins.length === 0) {
+
+    const [admins] = await db.query(
+      'SELECT id, password_hash FROM admins WHERE username = ?', [username]
+    );
+    if (admins.length === 0)
       return res.status(401).json({ success: false, message: 'Admin not found' });
-    }
-    const passwordMatch = await bcrypt.compare(password, admins[0].password_hash);
-    if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: 'Password incorrect' });
-    }
+
+    const match = await bcrypt.compare(password, admins[0].password_hash);
+    if (!match)
+      return res.status(401).json({ success: false, message: 'Password ভুল।' });
+
     const token = jwt.sign(
       { id: admins[0].id, username, role: 'admin' },
       process.env.JWT_SECRET || 'your-secret-key',
@@ -45,43 +46,42 @@ router.post('/login', async (req, res) => {
   }
 });
 
+/* ── GET /stats ──────────────────────────────────── */
 router.get('/stats', adminAuthMiddleware, async (req, res) => {
   try {
-    const [stats] = await db.query(`
-      SELECT 
-        COUNT(DISTINCT u.id) as total_users,
-        COUNT(c.id) as total_cards,
-        SUM(CASE WHEN c.status = 'issued' THEN 1 ELSE 0 END) as issued_cards,
-        SUM(CASE WHEN c.status = 'applied' OR c.status = 'processing' THEN 1 ELSE 0 END) as pending_cards
+    const [[stats]] = await db.query(`
+      SELECT
+        COUNT(DISTINCT u.id)                                                      AS total_users,
+        COUNT(c.id)                                                               AS total_cards,
+        SUM(CASE WHEN c.status IN ('approved','issued')    THEN 1 ELSE 0 END)    AS issued_cards,
+        SUM(CASE WHEN c.status IN ('applied','processing') THEN 1 ELSE 0 END)    AS pending_cards
       FROM users u
       LEFT JOIN cards c ON u.id = c.user_id
     `);
+
     const [cardsByType] = await db.query(`
-      SELECT ct.type_name, COUNT(c.id) as count
+      SELECT ct.type_name, COUNT(c.id) AS count
       FROM card_types ct
       LEFT JOIN cards c ON ct.id = c.card_type_id
       GROUP BY ct.type_name
     `);
-    res.json({
-      success: true,
-      stats: stats[0],
-      cards_by_type: cardsByType
-    });
+
+    res.json({ success: true, stats: { ...stats, cards_by_type: cardsByType } });
   } catch (err) {
     console.error('Stats error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
+/* ── GET /users ──────────────────────────────────── */
 router.get('/users', adminAuthMiddleware, async (req, res) => {
   try {
-    const limit = req.query.limit || 100;
-    const [users] = await db.query(`
-      SELECT id, nid_number, full_name, phone, blood_group, status, created_at
-      FROM users
-      ORDER BY created_at DESC
-      LIMIT ?
-    `, [parseInt(limit)]);
+    const limit = parseInt(req.query.limit) || 100;
+    const [users] = await db.query(
+      `SELECT id, nid_number, full_name, phone, blood_group, status, created_at
+       FROM users ORDER BY created_at DESC LIMIT ?`,
+      [limit]
+    );
     res.json({ success: true, users });
   } catch (err) {
     console.error('Get users error:', err);
@@ -89,21 +89,25 @@ router.get('/users', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+/* ── GET /users/:id ──────────────────────────────── */
 router.get('/users/:id', adminAuthMiddleware, async (req, res) => {
   try {
     const [users] = await db.query(
-      'SELECT id, nid_number, full_name, date_of_birth, phone, blood_group, address, status, created_at FROM users WHERE id = ?',
+      `SELECT id, nid_number, full_name, date_of_birth, phone, blood_group,
+              address, status, created_at
+       FROM users WHERE id = ?`,
       [req.params.id]
     );
-    if (users.length === 0) {
+    if (users.length === 0)
       return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    const [cards] = await db.query(`
-      SELECT c.id, c.card_number, c.status, c.applied_at, c.issued_at, ct.type_name
-      FROM cards c
-      LEFT JOIN card_types ct ON c.card_type_id = ct.id
-      WHERE c.user_id = ?
-    `, [req.params.id]);
+
+    const [cards] = await db.query(
+      `SELECT c.id, c.card_number, c.status, c.applied_at, c.issued_at, ct.type_name AS card_type
+       FROM cards c
+       LEFT JOIN card_types ct ON c.card_type_id = ct.id
+       WHERE c.user_id = ?`,
+      [req.params.id]
+    );
     res.json({ success: true, user: { ...users[0], cards } });
   } catch (err) {
     console.error('Get user error:', err);
@@ -111,12 +115,13 @@ router.get('/users/:id', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+/* ── PATCH /users/:id/status ─────────────────────── */
 router.patch('/users/:id/status', adminAuthMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
-    if (!['pending', 'active', 'suspended'].includes(status)) {
+    if (!['pending', 'active', 'suspended'].includes(status))
       return res.status(400).json({ success: false, message: 'Invalid status' });
-    }
+
     await db.query('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
     res.json({ success: true, message: `User status updated to ${status}` });
   } catch (err) {
@@ -125,12 +130,69 @@ router.patch('/users/:id/status', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+/* ── GET /cards ──────────────────────────────────── */
+// ✅ NEW: সব card applications একসাথে দেখার জন্য
+router.get('/cards', adminAuthMiddleware, async (req, res) => {
+  try {
+    const limit  = parseInt(req.query.limit)  || 500;
+    const status = req.query.status || null;
+    const type   = req.query.type   || null;
+
+    let query = `
+      SELECT
+        c.id,
+        c.card_number,
+        c.status,
+        c.applied_at,
+        c.issued_at,
+        ct.type_name   AS card_type,
+        u.id           AS user_id,
+        u.full_name    AS user_name,
+        u.nid_number   AS nid,
+        u.phone,
+        u.blood_group  AS blood
+      FROM cards c
+      LEFT JOIN card_types ct ON c.card_type_id  = ct.id
+      LEFT JOIN users u       ON c.user_id        = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status) { query += ' AND c.status = ?';       params.push(status); }
+    if (type)   { query += ' AND ct.type_name = ?';   params.push(type);   }
+
+    query += ' ORDER BY c.applied_at DESC LIMIT ?';
+    params.push(limit);
+
+    const [cards] = await db.query(query, params);
+    res.json({ success: true, cards });
+  } catch (err) {
+    console.error('Get admin cards error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/* ── PATCH /cards/:id/status ─────────────────────── */
+// ✅ FIX: Card status change করে (user status নয়)
 router.patch('/cards/:id/status', adminAuthMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
-    if (!['applied', 'processing', 'approved', 'issued', 'rejected'].includes(status)) {
+    if (!['applied', 'processing', 'approved', 'issued', 'rejected'].includes(status))
       return res.status(400).json({ success: false, message: 'Invalid status' });
+
+    // ✅ Approved হলে card_number generate করো
+    if (status === 'approved' || status === 'issued') {
+      const [card] = await db.query('SELECT card_number FROM cards WHERE id = ?', [req.params.id]);
+      if (card.length > 0 && !card[0].card_number) {
+        const cardNumber = 'BD' + Date.now().toString().slice(-8) + Math.floor(Math.random() * 100);
+        await db.query(
+          'UPDATE cards SET status = ?, card_number = ? WHERE id = ?',
+          [status, cardNumber, req.params.id]
+        );
+        return res.json({ success: true, message: `Card status updated to ${status}`, card_number: cardNumber });
+      }
     }
+
     await db.query('UPDATE cards SET status = ? WHERE id = ?', [status, req.params.id]);
     res.json({ success: true, message: `Card status updated to ${status}` });
   } catch (err) {
@@ -139,22 +201,34 @@ router.patch('/cards/:id/status', adminAuthMiddleware, async (req, res) => {
   }
 });
 
+/* ── DELETE /users/:id ───────────────────────────── */
+router.delete('/users/:id', adminAuthMiddleware, async (req, res) => {
+  try {
+    await db.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/* ── PUT /change-password ────────────────────────── */
 router.put('/change-password', adminAuthMiddleware, async (req, res) => {
   try {
     const { current_password, new_password } = req.body;
-    if (!current_password || !new_password) {
+    if (!current_password || !new_password)
       return res.status(400).json({ success: false, message: 'Both passwords required' });
-    }
+
     const [admins] = await db.query('SELECT password_hash FROM admins WHERE id = ?', [req.admin.id]);
-    if (admins.length === 0) {
+    if (admins.length === 0)
       return res.status(404).json({ success: false, message: 'Admin not found' });
-    }
-    const passwordMatch = await bcrypt.compare(current_password, admins[0].password_hash);
-    if (!passwordMatch) {
-      return res.status(401).json({ success: false, message: 'Current password incorrect' });
-    }
-    const hashedPassword = await bcrypt.hash(new_password, 10);
-    await db.query('UPDATE admins SET password_hash = ? WHERE id = ?', [hashedPassword, req.admin.id]);
+
+    const match = await bcrypt.compare(current_password, admins[0].password_hash);
+    if (!match)
+      return res.status(401).json({ success: false, message: 'Current password ভুল।' });
+
+    const hashed = await bcrypt.hash(new_password, 10);
+    await db.query('UPDATE admins SET password_hash = ? WHERE id = ?', [hashed, req.admin.id]);
     res.json({ success: true, message: 'Password changed successfully!' });
   } catch (err) {
     console.error('Change admin password error:', err);
