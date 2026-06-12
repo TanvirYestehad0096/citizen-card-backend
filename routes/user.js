@@ -191,5 +191,49 @@ router.delete('/delete-account', authMiddleware, async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+/* ── GET /notifications ──────────────────────────── */
+router.get('/notifications', authMiddleware, async (req, res) => {
+  try {
+    const [notifications] = await db.query(
+      `SELECT id, title, message, is_read, created_at
+       FROM notifications
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [req.user.id]
+    );
+    const unread = notifications.filter(n => !n.is_read).length;
+    res.json({ success: true, notifications, unread });
+  } catch (err) {
+    console.error('Get notifications error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
+/* ── PUT /notifications/:id/read ─────────────────── */
+router.put('/notifications/:id/read', authMiddleware, async (req, res) => {
+  try {
+    await db.query(
+      'UPDATE notifications SET is_read = TRUE WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark read error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+/* ── PUT /notifications/read-all ─────────────────── */
+router.put('/notifications/read-all', authMiddleware, async (req, res) => {
+  try {
+    await db.query(
+      'UPDATE notifications SET is_read = TRUE WHERE user_id = ?',
+      [req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark all read error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 module.exports = router;

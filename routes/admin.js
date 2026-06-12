@@ -235,5 +235,41 @@ router.put('/change-password', adminAuthMiddleware, async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+/* ── POST /notifications ─────────────────────────── */
+router.post('/notifications', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { user_id, title, message } = req.body;
+
+    if (!title || !message)
+      return res.status(400).json({ success: false, message: 'Title এবং Message দিন।' });
+
+    // user_id না থাকলে সব user কে পাঠাবে
+    if (!user_id || user_id === 'all') {
+      const [users] = await db.query('SELECT id FROM users');
+      for (const user of users) {
+        await db.query(
+          'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
+          [user.id, title, message]
+        );
+      }
+      return res.json({ success: true, message: `✅ সব user কে notification পাঠানো হয়েছে।` });
+    }
+
+    // নির্দিষ্ট user কে পাঠাবে
+    const [users] = await db.query('SELECT id FROM users WHERE nid_number = ?', [user_id]);
+    if (users.length === 0)
+      return res.status(404).json({ success: false, message: 'এই NID দিয়ে কোনো user পাওয়া যায়নি।' });
+
+    await db.query(
+      'INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)',
+      [users[0].id, title, message]
+    );
+
+    res.json({ success: true, message: '✅ Notification পাঠানো হয়েছে।' });
+  } catch (err) {
+    console.error('Send notification error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 module.exports = router;
